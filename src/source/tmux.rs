@@ -141,6 +141,7 @@ struct TmuxPaneState {
     content_hash: u64,
     last_change: Instant,
     last_stale_notification: Option<Instant>,
+    pane_dead: bool,
 }
 
 #[derive(Default)]
@@ -154,6 +155,7 @@ struct TmuxPaneSnapshot {
     session: String,
     pane_name: String,
     content: String,
+    pane_dead: bool,
 }
 
 pub async fn monitor_registered_session(
@@ -211,10 +213,12 @@ pub async fn monitor_registered_session(
                             snapshot: pane.content,
                             last_change: now,
                             last_stale_notification: None,
+                            pane_dead: pane.pane_dead,
                         },
                     );
                 }
                 Some(existing) => {
+                    existing.pane_dead = pane.pane_dead;
                     if existing.content_hash != hash {
                         let hits = collect_keyword_hits(
                             &existing.snapshot,
@@ -363,11 +367,13 @@ async fn poll_tmux(
                                     content_hash: hash,
                                     last_change: now,
                                     last_stale_notification: None,
+                                    pane_dead: pane.pane_dead,
                                 },
                             );
                             None
                         }
                         Some(existing) => {
+                            existing.pane_dead = pane.pane_dead;
                             if existing.content_hash != hash {
                                 let hits = collect_keyword_hits(
                                     &existing.snapshot,
@@ -587,7 +593,7 @@ fn insert_resolved_session(
 }
 
 fn should_emit_stale(pane: &TmuxPaneState, now: Instant, stale_minutes: u64) -> bool {
-    if stale_minutes == 0 {
+    if stale_minutes == 0 || pane.pane_dead {
         return false;
     }
     let stale_after = Duration::from_secs(stale_minutes * 60);
@@ -765,7 +771,7 @@ async fn snapshot_tmux_session(session: &str) -> Result<Vec<TmuxPaneSnapshot>> {
         .arg("-t")
         .arg(session)
         .arg("-F")
-        .arg("#{pane_id}|#{session_name}|#{window_index}.#{pane_index}|#{pane_title}")
+        .arg("#{pane_id}|#{session_name}|#{window_index}.#{pane_index}|#{pane_dead}|#{pane_title}")
         .output()
         .await?;
     if !output.status.success() {
@@ -774,13 +780,14 @@ async fn snapshot_tmux_session(session: &str) -> Result<Vec<TmuxPaneSnapshot>> {
 
     let mut panes = Vec::new();
     for line in String::from_utf8(output.stdout)?.lines() {
-        let mut parts = line.splitn(4, '|');
+        let mut parts = line.splitn(5, '|');
         let pane_id = parts.next().unwrap_or_default().to_string();
         if pane_id.is_empty() {
             continue;
         }
         let session_name = parts.next().unwrap_or_default().to_string();
         let pane_name = parts.next().unwrap_or_default().to_string();
+        let pane_dead = parts.next().unwrap_or_default() == "1";
         let capture = Command::new(tmux_bin())
             .arg("capture-pane")
             .arg("-p")
@@ -798,6 +805,7 @@ async fn snapshot_tmux_session(session: &str) -> Result<Vec<TmuxPaneSnapshot>> {
             session: session_name,
             pane_name,
             content: String::from_utf8(capture.stdout)?,
+            pane_dead,
         });
     }
     Ok(panes)
@@ -1563,6 +1571,7 @@ error: failed";
             content_hash: 0,
             last_change: Instant::now() - Duration::from_secs(3600),
             last_stale_notification: None,
+            pane_dead: false,
         };
         // stale_minutes=0 should never emit, even after 1 hour idle
         assert!(!should_emit_stale(&pane, Instant::now(), 0));
@@ -1577,8 +1586,24 @@ error: failed";
             content_hash: 0,
             last_change: Instant::now() - Duration::from_secs(3600),
             last_stale_notification: None,
+            pane_dead: false,
         };
         // stale_minutes=1 should emit after 1 hour idle
         assert!(should_emit_stale(&pane, Instant::now(), 1));
+    }
+
+    #[test]
+    fn pane_dead_suppresses_stale_alert() {
+        let pane = TmuxPaneState {
+            session: "test".into(),
+            pane_name: "0.0".into(),
+            snapshot: String::new(),
+            content_hash: 0,
+            last_change: Instant::now() - Duration::from_secs(3600),
+            last_stale_notification: None,
+            pane_dead: true,
+        };
+        // Dead pane should never emit stale, even after 1 hour idle
+        assert!(!should_emit_stale(&pane, Instant::now(), 1));
     }
 }
