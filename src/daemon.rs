@@ -565,7 +565,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn post_omx_hook_accepts_native_hook_envelope_and_queues_normalized_event() {
+    async fn post_native_hook_accepts_provider_native_payload_and_queues_normalized_event() {
         let (tx, mut rx) = mpsc::channel(1);
         let state = AppState {
             config: Arc::new(AppConfig::default()),
@@ -574,20 +574,19 @@ mod tests {
             tmux_registry: Arc::new(RwLock::new(HashMap::new())),
         };
         let payload = json!({
-            "schema_version": "1",
-            "event": "session-start",
-            "timestamp": "2026-04-01T22:00:00Z",
-            "context": {
-                "normalized_event": "started",
-                "agent_name": "omx",
-                "session_name": "issue-65-native-sdk",
-                "status": "started",
-                "repo_path": "/repo/clawhip",
-                "branch": "feat/issue-65-native-sdk"
+            "provider": "codex",
+            "event_name": "SessionStart",
+            "repo_path": "/repo/clawhip",
+            "worktree_path": "/repo/clawhip/.worktrees/issue-65-native-sdk",
+            "repo_name": "clawhip",
+            "project": "clawhip",
+            "session_id": "issue-65-native-sdk",
+            "event_payload": {
+                "source": "startup"
             }
         });
 
-        let response = post_omx_hook(State(state), Json(payload))
+        let response = post_native_hook(State(state), Json(payload))
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::ACCEPTED);
@@ -600,16 +599,13 @@ mod tests {
 
         let queued = rx.recv().await.unwrap();
         assert_eq!(queued.kind, "session.started");
-        assert_eq!(queued.payload["tool"], Value::from("omx"));
-        assert_eq!(
-            queued.payload["session_name"],
-            Value::from("issue-65-native-sdk")
-        );
+        assert_eq!(queued.payload["tool"], Value::from("codex"));
+        assert_eq!(queued.payload["session_id"], Value::from("issue-65-native-sdk"));
         assert_eq!(queued.payload["event_id"], Value::from(event_id));
     }
 
     #[tokio::test]
-    async fn post_omx_hook_rejects_missing_normalized_event() {
+    async fn post_native_hook_rejects_missing_event_name() {
         let (tx, _rx) = mpsc::channel(1);
         let state = AppState {
             config: Arc::new(AppConfig::default()),
@@ -618,15 +614,10 @@ mod tests {
             tmux_registry: Arc::new(RwLock::new(HashMap::new())),
         };
         let payload = json!({
-            "schema_version": "1",
-            "event": "session-start",
-            "context": {
-                "agent_name": "omx",
-                "status": "started"
-            }
+            "provider": "claude"
         });
 
-        let response = post_omx_hook(State(state), Json(payload))
+        let response = post_native_hook(State(state), Json(payload))
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
@@ -636,7 +627,7 @@ mod tests {
         assert!(
             response_json["error"]
                 .as_str()
-                .is_some_and(|error| error.contains("context.normalized_event"))
+                .is_some_and(|error| error.contains("event name"))
         );
     }
 
