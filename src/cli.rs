@@ -42,11 +42,9 @@ pub enum Commands {
     },
     /// Check daemon health/status.
     Status,
-    /// Scaffold common setup presets without editing advanced routes or monitors.
     #[command(
-        arg_required_else_help = true,
-        about = "Scaffold the bounded quickstart preset catalog",
-        long_about = "Scaffold the bounded quickstart preset catalog. Advanced routes and monitors still require manual config editing or the bounded clawhip config editor."
+        about = "Scaffold common setup presets without editing advanced routes or monitors",
+        long_about = "Scaffold the bounded quickstart preset catalog.\n\nAdvanced routes and monitors still require manual config editing or the bounded clawhip config editor."
     )]
     Setup(SetupArgs),
     /// Send a custom event to the local daemon.
@@ -147,7 +145,8 @@ pub struct EmitArgs {
     pub fields: Vec<String>,
 }
 
-#[derive(Debug, Clone, Args)]
+#[derive(Debug, Clone, Default, Args)]
+#[command(arg_required_else_help = true)]
 pub struct SetupArgs {
     /// Set or update the canonical Discord webhook quickstart route.
     #[arg(long)]
@@ -696,7 +695,8 @@ pub enum ConfigCommand {
 mod tests {
     use super::*;
     use crate::event::compat::from_incoming_event;
-    use clap::{CommandFactory, error::ErrorKind};
+    use clap::CommandFactory;
+    use clap::error::ErrorKind;
 
     #[test]
     fn parses_emit_subcommand_with_top_level_fields() {
@@ -988,7 +988,7 @@ mod tests {
         );
 
         let rendered = error.to_string();
-        assert!(rendered.contains("Scaffold the bounded quickstart preset catalog"));
+        assert!(rendered.contains("Usage: clawhip setup [OPTIONS]"));
         assert!(rendered.contains("--webhook"));
         assert!(rendered.contains("--bot-token"));
     }
