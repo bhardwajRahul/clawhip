@@ -240,10 +240,7 @@ async fn register_and_start_monitor(
 /// staying alive for the entire session lifetime and exposing the caller to
 /// false-negative SIGKILL surfaces when the launcher/supervisor later kills
 /// it (issue #194).
-async fn register_for_daemon_monitoring(
-    args: TmuxMonitorArgs,
-    config: &AppConfig,
-) -> Result<()> {
+async fn register_for_daemon_monitoring(args: TmuxMonitorArgs, config: &AppConfig) -> Result<()> {
     let client = DaemonClient::from_config(config);
     let registration = args.into_registration(false);
     eprintln!("{}", format_watch_audit_log(&registration));

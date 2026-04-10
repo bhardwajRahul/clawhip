@@ -1076,15 +1076,7 @@ mod tests {
         // to the caller after the session is created. If `follow` defaulted
         // back to true, `clawhip tmux new` would once again block for the
         // session lifetime and expose callers to false-negative SIGKILL.
-        let cli = Cli::parse_from([
-            "clawhip",
-            "tmux",
-            "new",
-            "-s",
-            "issue-194",
-            "--",
-            "codex",
-        ]);
+        let cli = Cli::parse_from(["clawhip", "tmux", "new", "-s", "issue-194", "--", "codex"]);
 
         let Commands::Tmux { command } = cli.command.expect("tmux command") else {
             panic!("expected tmux command");
