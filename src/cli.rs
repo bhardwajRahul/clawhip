@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::path::PathBuf;
 
-use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
+use clap::{ArgAction, Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use serde_json::Value;
 
 use crate::events::MessageFormat;
@@ -42,10 +42,7 @@ pub enum Commands {
     },
     /// Check daemon health/status.
     Status,
-    /// Scaffold common setup presets without editing the full config manually.
-    #[command(
-        after_help = "Supports only the fixed five-preset setup surface. For advanced routes or monitors, use `clawhip config` for the bounded preset editor or edit the config file manually."
-    )]
+    /// Scaffold common setup presets without editing advanced routes or monitors.
     Setup(SetupArgs),
     /// Send a custom event to the local daemon.
     Send {
@@ -163,6 +160,29 @@ pub struct EmitArgs {
     pub event_type: String,
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub fields: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Args)]
+#[command(
+    arg_required_else_help = true,
+    long_about = "Scaffold the bounded quickstart preset catalog. Advanced routes and monitors still require manual config editing or the bounded clawhip config editor."
+)]
+pub struct SetupArgs {
+    /// Set or update the canonical Discord webhook quickstart route.
+    #[arg(long)]
+    pub webhook: Option<String>,
+    /// Set the Discord bot token in [providers.discord].
+    #[arg(long = "bot-token")]
+    pub bot_token: Option<String>,
+    /// Set the default Discord channel in [defaults].
+    #[arg(long = "default-channel")]
+    pub default_channel: Option<String>,
+    /// Set the default message format in [defaults].
+    #[arg(long = "default-format")]
+    pub default_format: Option<MessageFormat>,
+    /// Set the daemon base URL in [daemon].
+    #[arg(long = "daemon-base-url")]
+    pub daemon_base_url: Option<String>,
 }
 
 impl EmitArgs {
@@ -695,6 +715,7 @@ pub enum ConfigCommand {
 mod tests {
     use super::*;
     use crate::event::compat::from_incoming_event;
+    use clap::error::ErrorKind;
 
     #[test]
     fn parses_emit_subcommand_with_top_level_fields() {
@@ -944,7 +965,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_setup_mixed_preset_flags() {
+    fn parses_setup_mixed_flag_subcommand() {
         let cli = Cli::parse_from([
             "clawhip",
             "setup",
@@ -953,11 +974,11 @@ mod tests {
             "--bot-token",
             "discord-token",
             "--default-channel",
-            "123456",
+            "alerts",
             "--default-format",
             "alert",
             "--daemon-base-url",
-            "http://127.0.0.1:3000",
+            "http://127.0.0.1:31337",
         ]);
 
         let Commands::Setup(args) = cli.command.expect("setup command") else {
@@ -969,37 +990,41 @@ mod tests {
             Some("https://discord.com/api/webhooks/123/abc")
         );
         assert_eq!(args.bot_token.as_deref(), Some("discord-token"));
-        assert_eq!(args.default_channel.as_deref(), Some("123456"));
+        assert_eq!(args.default_channel.as_deref(), Some("alerts"));
         assert_eq!(args.default_format, Some(MessageFormat::Alert));
         assert_eq!(
             args.daemon_base_url.as_deref(),
-            Some("http://127.0.0.1:3000")
+            Some("http://127.0.0.1:31337")
         );
     }
 
     #[test]
-    fn setup_requires_at_least_one_flag() {
-        use clap::error::ErrorKind;
-
+    fn setup_without_flags_fails_with_help() {
         let error = Cli::try_parse_from(["clawhip", "setup"]).expect_err("setup should fail");
-        assert_eq!(error.kind(), ErrorKind::MissingRequiredArgument);
+        assert_eq!(
+            error.kind(),
+            ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+        );
+
+        let rendered = error.to_string();
+        assert!(rendered.contains("Scaffold the bounded quickstart preset catalog"));
+        assert!(rendered.contains("--webhook"));
+        assert!(rendered.contains("--bot-token"));
     }
 
     #[test]
-    fn setup_help_mentions_bounded_surface_and_manual_escape_hatch() {
-        use clap::CommandFactory;
-
+    fn setup_help_mentions_manual_advanced_editing() {
         let mut command = Cli::command();
         let setup = command
             .find_subcommand_mut("setup")
             .expect("setup subcommand");
-        let mut help = Vec::new();
-        setup.write_long_help(&mut help).expect("help");
-        let help = String::from_utf8(help).expect("utf8 help");
+        let mut buffer = Vec::new();
+        setup.write_long_help(&mut buffer).expect("write help");
+        let help = String::from_utf8(buffer).expect("utf8");
 
-        assert!(help.contains("fixed five-preset setup surface"));
-        assert!(help.contains("clawhip config"));
-        assert!(help.contains("advanced routes or monitors"));
+        assert!(help.contains("Advanced routes and monitors still require manual config editing"));
+        assert!(help.contains("--default-format <DEFAULT_FORMAT>"));
+        assert!(help.contains("--daemon-base-url <DAEMON_BASE_URL>"));
     }
 
     #[test]
