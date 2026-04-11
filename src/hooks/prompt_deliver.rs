@@ -237,10 +237,10 @@ fn detect_hook_setup(cwd: &Path) -> Result<HookSetup> {
         }
     }
 
-    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-        if let Some(setup) = hook_setup_at(&home, HookDetectionScope::Global) {
-            return Ok(setup);
-        }
+    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from)
+        && let Some(setup) = hook_setup_at(&home, HookDetectionScope::Global)
+    {
+        return Ok(setup);
     }
 
     Err(format!(
@@ -652,12 +652,12 @@ async fn wait_for_progress_signal(
 
     loop {
         if let Some(before) = baseline_hash {
-            if let Ok(current) = capture_pane_hash(target).await {
-                if current != before {
-                    return Ok(());
-                }
+            if let Ok(current) = capture_pane_hash(target).await
+                && current != before
+            {
+                return Ok(());
             }
-        } else if let Ok(_) = capture_pane_hash(target).await {
+        } else if capture_pane_hash(target).await.is_ok() {
             return Ok(());
         }
 
@@ -784,9 +784,9 @@ fn tmux_stderr(stderr: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::os::unix::fs::PermissionsExt;
     use tempfile::tempdir;
-use serial_test::serial;
 
     #[test]
     fn has_prompt_char_detects_common_shells() {
@@ -884,9 +884,13 @@ use serial_test::serial;
         assert!(error.to_string().contains("prompt-submit-aware hook setup"));
 
         if let Some(previous) = previous_home {
-            unsafe { std::env::set_var("HOME", previous); }
+            unsafe {
+                std::env::set_var("HOME", previous);
+            }
         } else {
-            unsafe { std::env::remove_var("HOME"); }
+            unsafe {
+                std::env::remove_var("HOME");
+            }
         }
     }
 
@@ -1010,7 +1014,9 @@ use serial_test::serial;
             progress_timeout: Duration::from_millis(30),
         };
 
-        let error = deliver(&config).await.expect_err("idle pane should fail fast");
+        let error = deliver(&config)
+            .await
+            .expect_err("idle pane should fail fast");
         assert!(error.to_string().contains("no bounded progress signal"));
 
         if let Some(previous) = previous_tmux {
