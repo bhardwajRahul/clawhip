@@ -61,10 +61,10 @@ cat payload.json | clawhip native hook --provider codex
 
 Recommended installation model:
 
-- install provider-native hooks at project or global scope
-- keep provider config in the provider-owned config files
-- keep routing metadata in `.clawhip/project.json`
-- use `.clawhip/hooks/` only for additive augmentation such as frontmatter or recent context
+- install provider-native hooks once at global scope (`~/.codex` / `~/.claude`)
+- keep provider hook config in the provider-owned global config files
+- let clawhip derive `worktree_path`, `repo_path`, and `repo_name` from git context; generated `.clawhip/project.json` is no longer a supported routing input
+- keep `.clawhip/hooks/` only for additive augmentation such as frontmatter or recent context; do not treat repo-local generated hook state/config as install state
 
 clawhip still pairs well with tmux when you want keyword/stale monitoring, but tmux is now
 optional and no longer the primary hook-registration surface.
@@ -75,9 +75,15 @@ For tmux-backed recovery into an already-running hooked session, use:
 clawhip deliver --session <tmux-session> --prompt "..." --max-enters 4
 ```
 
-`clawhip deliver` validates repo-local prompt-submit hook setup, confirms the target pane is an
-active Codex/Claude (including OMC/OMX wrapper) session, then retries Enter until
-`.clawhip/state/prompt-submit.json` changes or the bounded retry limit is reached.
+`clawhip deliver` validates the canonical global prompt-submit hook setup, confirms the target
+pane is an active repo/worktree-backed Codex/Claude (including OMC/OMX wrapper)
+session, then retries Enter until delivery succeeds or the bounded retry limit is
+reached.
+
+If you previously used `clawhip hooks install --all --scope project`, rerun the hook
+installer with the default global scope. Legacy project-scoped entrypoints are
+migration shims only: they must not be used to create new repo-local hook state, and
+non-git inputs normalize to `non_git` before route evaluation.
 
 ## Recipes
 
@@ -479,12 +485,13 @@ Stable routing metadata (when available):
 - `event_timestamp`
 
 Augmentation rules:
-- provider input + clawhip project metadata define the immutable base contract
+- provider input + git-derived repo/worktree context define the immutable base contract
 - `.clawhip/hooks/` scripts may only add fields or enrich message/context
-- augmenters must not remove or overwrite base routing keys
+- augmenters must not remove or overwrite `provider`, `event`, `worktree_path`, `repo_path`, or `repo_name`
 
 Route guidance:
-- prefer filters like `provider`, `event`, `repo_name`, `project`, and `branch`
+- prefer filters like `provider`, `event`, `worktree_path`, `repo_path`, and `branch`
+- use `repo_name` / `project` only as convenience filters after path-based routing keys
 - avoid route logic that depends on rendered message text
 - keep provider-specific extras out of the shared v1 route surface until explicitly adopted
 
@@ -586,11 +593,12 @@ Behavior:
 - `deliver` is the prompt recovery path for an already-running hooked tmux-backed provider session
 - `tmux list` shows active daemon-known watches with source, registration timestamp, and parent-process info
 - final delivery still goes through daemon routing
-- `deliver` refuses arbitrary shells and requires repo-local prompt-submit-aware hook setup (`clawhip hooks install --all --scope project`)
+- `deliver` refuses arbitrary shells and requires the canonical global provider-hook install plus a repo/worktree-backed target pane
 
 Routing note:
 - session names are labels for operators, not routing authority
-- project metadata should be the source of truth for routing
+- canonicalized `worktree_path` then `repo_path` are the routing authority
+- `repo_name` / `project` remain convenience metadata only and must not break path collisions
 - broad prefix monitors like `clawhip*` are dangerous because they can overlap with launcher-registered watches and create stale/keyword noise
 
 Verification:

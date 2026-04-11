@@ -9,5 +9,6 @@ clawhip native hook --provider codex --file payload.json
 clawhip native hook --provider claude --file payload.json
 ```
 
-Keep stable project metadata in `.clawhip/project.json` and use `.clawhip/hooks/` only for
-additive augmentation.
+Install provider hooks globally, let clawhip derive repo/worktree identity from git context,
+and use `.clawhip/hooks/` only for additive augmentation. Legacy project-scoped hook installs
+should be migrated to the global path.

@@ -61,7 +61,7 @@ Operational flow:
 
 Operational flow:
 
-1. Enable provider-native hooks at project or global scope in a real Codex workspace.
+1. Enable provider-native hooks with the canonical global install in a real Codex workspace.
 2. Pipe one representative Codex payload through the generic native ingress:
 
 ```bash
@@ -72,7 +72,7 @@ printf '%s\n' '{
 }' | clawhip native hook --provider codex
 ```
 
-3. Confirm clawhip accepts it and renders a stable lifecycle message with project/repo context.
+3. Confirm clawhip accepts it and renders a stable lifecycle message with git-derived repo/worktree context (without relying on `.clawhip/project.json`).
 4. Repeat with a representative Claude payload:
 
 ```bash
@@ -86,6 +86,7 @@ printf '%s\n' '{
 5. Confirm both providers normalize into the same shared route family.
 6. Send representative payloads for `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, and `Stop`.
 7. Confirm additive augmentation still preserves the base routing keys when `.clawhip/hooks/` is enabled.
+8. If you intentionally test a non-git cwd, confirm the payload normalizes to `non_git` and is dropped before route evaluation/delivery.
 
 ### tmux presets
 

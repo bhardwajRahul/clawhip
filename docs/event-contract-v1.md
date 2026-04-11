@@ -41,7 +41,7 @@ After clawhip normalizes a provider payload, these base routing fields are the v
 | `directory` | when known | Provider working directory at hook time. |
 | `worktree_path` | when known | Worktree/repo path used for routing and context. |
 | `repo_name` | when known | Repository identity for stable routing. |
-| `project` | when known | Project identity, preferably sourced from `.clawhip/project.json`. |
+| `project` | when known | Convenience project identity derived from provider input or git context; never the authoritative routing key. |
 | `session_id` | no | Provider/session correlation identifier. |
 | `branch` | when known | Git branch when available. |
 | `tool_name` | tool events | Tool identifier for pre/post tool hooks. |
@@ -70,7 +70,7 @@ Disallowed:
 v1 verification must prove:
 
 1. Codex and Claude both normalize all 5 shared events successfully.
-2. Project metadata survives normalization.
+2. Git-derived repo/worktree metadata survives normalization without requiring generated `.clawhip/project.json`.
 3. Augmentation is additive and preserves the base contract.
 4. Public documentation only references the provider-native surface.
 

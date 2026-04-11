@@ -40,7 +40,7 @@ surface.
 
 ## Stable base routing fields
 
-When the provider payload and project metadata make them available, clawhip preserves these base
+When the provider payload and git repo/worktree context make them available, clawhip preserves these base
 fields for routing:
 
 - `provider`
@@ -58,9 +58,9 @@ fields for routing:
 
 ### Notes
 
-- `.clawhip/project.json` is the preferred place for project identity that should survive across
-  providers.
-- `project` / `repo_name` should be the authority for project-level routing.
+- Canonicalized `worktree_path` then `repo_path` are the authoritative routing identity.
+- `repo_name` / `project` are convenience metadata only; they must not authoritatively disambiguate collisions.
+- Generated `.clawhip/project.json` is no longer a supported routing input.
 - `directory` and `worktree_path` are base context, not optional decorations.
 - Tool-specific metadata is additive; it should not replace core routing fields.
 
@@ -87,10 +87,12 @@ Prefer filters on structured metadata such as:
 
 - `provider`
 - `event`
-- `repo_name`
-- `project`
+- `worktree_path`
+- `repo_path`
 - `branch`
 - `tool_name`
+
+Use `repo_name` / `project` only as secondary convenience filters after the path-based routing keys.
 
 Avoid routing on rendered message text.
 
@@ -99,7 +101,7 @@ Recommended route shape:
 ```toml
 [[routes]]
 event = "native.*"
-filter = { provider = "codex", project = "clawhip" }
+filter = { provider = "codex", worktree_path = "/abs/path/to/clawhip" }
 channel = "1480171113253175356"
 format = "compact"
 ```
@@ -115,11 +117,13 @@ Default clawhip formatting should stay low-noise:
 
 ## Migration note
 
-Provider-native configuration is now the supported setup path.
+Provider-native global configuration is now the supported setup path.
 
-1. Codex or Claude owns hook registration plus scope precedence
-2. clawhip ingests the provider payload through `clawhip native hook`
-3. clawhip loads project metadata plus additive augmenters
-4. clawhip owns channel routing, mentions, formatting, and delivery
+1. Install Codex/Claude hook forwarding once in the provider-owned global config (`clawhip hooks install` with the default global scope).
+2. clawhip ingests provider payloads through `clawhip native hook`.
+3. clawhip derives `worktree_path`, `repo_path`, and `repo_name` from git context instead of generated repo-local project metadata.
+4. Inputs outside a git repo/worktree normalize to `non_git` and stop before route evaluation/delivery.
+5. `.clawhip/hooks/` remains additive-only enrichment; it is not install state.
+6. If you previously used `clawhip hooks install --scope project`, treat it as a deprecation-only compatibility shim and rerun the global install path.
 
 That keeps notification policy in one place and avoids duplicated integrations.
