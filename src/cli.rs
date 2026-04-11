@@ -673,10 +673,10 @@ pub struct HooksInstallArgs {
     /// Install only the selected provider(s). Repeat to install multiple.
     #[arg(long, value_enum, action = ArgAction::Append)]
     pub provider: Vec<HookProvider>,
-    /// Install at the project root or in the user's global provider config.
+    /// Install in the user's global provider config. `project` is a deprecated compatibility shim.
     #[arg(long, value_enum, default_value_t = HookInstallScope::Global)]
     pub scope: HookInstallScope,
-    /// Project root for project-scoped install. Defaults to the current directory.
+    /// Deprecated compatibility argument for `--scope project`; ignored because hook install is global-only.
     #[arg(long)]
     pub root: Option<PathBuf>,
     /// Overwrite clawhip-managed generated files when they already exist.
