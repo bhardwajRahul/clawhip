@@ -18,7 +18,10 @@ use crate::cron::CronSource;
 use crate::dispatch::Dispatcher;
 use crate::event::compat::from_incoming_event;
 use crate::events::{IncomingEvent, MessageFormat, normalize_event};
-use crate::native_hooks::incoming_event_from_native_hook_json;
+use crate::native_hooks::{
+    NATIVE_NON_GIT_OUTCOME, NATIVE_NORMALIZATION_OUTCOME_FIELD,
+    incoming_event_from_native_hook_json,
+};
 use crate::render::{DefaultRenderer, Renderer};
 use crate::router::Router;
 use crate::sink::{DiscordSink, Sink, SlackSink};
@@ -215,7 +218,28 @@ async fn post_native_hook(
         }
     };
 
+    if native_hook_should_drop(&event) {
+        return (
+            StatusCode::ACCEPTED,
+            Json(json!({
+                "ok": true,
+                "type": event.kind,
+                "dropped": true,
+                "reason": "non_git",
+            })),
+        )
+            .into_response();
+    }
+
     accept_event(&state, event).await
+}
+
+fn native_hook_should_drop(event: &IncomingEvent) -> bool {
+    event
+        .payload
+        .get(NATIVE_NORMALIZATION_OUTCOME_FIELD)
+        .and_then(Value::as_str)
+        == Some(NATIVE_NON_GIT_OUTCOME)
 }
 
 async fn accept_event(state: &AppState, event: IncomingEvent) -> axum::response::Response {
@@ -645,6 +669,19 @@ mod tests {
 
     #[tokio::test]
     async fn post_native_hook_accepts_codex_payload_and_queues_normalized_event() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let repo = temp.path().join("clawhip");
+        std::fs::create_dir_all(&repo).expect("create repo");
+        let git = std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .output()
+            .expect("git init");
+        assert!(
+            git.status.success(),
+            "git init failed: {}",
+            String::from_utf8_lossy(&git.stderr)
+        );
         let (tx, mut rx) = mpsc::channel(1);
         let state = AppState {
             config: Arc::new(AppConfig::default()),
@@ -656,11 +693,11 @@ mod tests {
         let payload = json!({
             "provider": "codex",
             "event_name": "SessionStart",
-            "directory": "/repo/clawhip",
-            "cwd": "/repo/clawhip",
+            "directory": repo,
+            "cwd": repo,
             "event_payload": {
                 "session_id": "sess-65",
-                "cwd": "/repo/clawhip"
+                "cwd": repo
             }
         });
 
@@ -711,6 +748,37 @@ mod tests {
                 .as_str()
                 .is_some_and(|error| error.contains("unsupported native hook event"))
         );
+    }
+
+    #[tokio::test]
+    async fn post_native_hook_accepts_but_drops_non_git_payloads_before_enqueue() {
+        let (tx, mut rx) = mpsc::channel(1);
+        let state = AppState {
+            config: Arc::new(AppConfig::default()),
+            port: 25294,
+            tx,
+            tmux_registry: Arc::new(RwLock::new(HashMap::new())),
+            pending_update: update::new_shared_pending_update(),
+        };
+        let dir = tempdir().expect("tempdir");
+        let payload = json!({
+            "provider": "codex",
+            "event_name": "SessionStart",
+            "directory": dir.path(),
+            "event_payload": {}
+        });
+
+        let response = post_native_hook(State(state), Json(payload))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let response_json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(response_json["ok"], json!(true));
+        assert_eq!(response_json["dropped"], json!(true));
+        assert_eq!(response_json["reason"], json!(NATIVE_NON_GIT_OUTCOME));
+        assert!(rx.try_recv().is_err(), "non-git payload should not enqueue");
     }
 
     #[tokio::test]

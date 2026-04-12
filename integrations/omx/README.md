@@ -9,5 +9,5 @@ clawhip native hook --provider codex --file payload.json
 clawhip native hook --provider claude --file payload.json
 ```
 
-Keep stable project metadata in `.clawhip/project.json` and use `.clawhip/hooks/` only for
-additive augmentation.
+Use `.clawhip/hooks/` only for additive augmentation. Routing identity now comes from git
+repo/worktree discovery, not repo-local clawhip metadata files.
